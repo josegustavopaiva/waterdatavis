@@ -1,0 +1,158 @@
+<!doctype html>
+<html>
+<head>
+<script src="https://d3js.org/d3.v5.min.js"></script>
+<script src="basics.js"></script>
+<link rel="stylesheet" type="text/css" href="styles.css" />
+</head>	
+<!-- <body style="background: url('none.png') 50% no-repeat fixed; background-size: cover;"> -->
+<body>
+<script>
+var sizeCells = 9;
+var heightMatrices = 12*sizeCells, widthMatrices = 31*sizeCells;
+var toolTip = d3.select('body').append('div').attr('class','tooltip').style('opacity', 0);
+var modelsTable = d3.select('body').append('div').attr('class','tableModel').style('opacity', 0);
+const cacheName = 'StreamFlowPredictionCache';
+loadPage();
+
+function loadPage() {
+
+	const queryString = window.location.search;
+	const urlParams = new URLSearchParams(queryString);
+
+	var stationList = urlParams.get('s');
+	if (stationList != null && stationList.length != 0)
+		stationList = stationList.split(',');
+	
+	if (stationList == null || stationList.length == 0) {
+		console.log('No stations informed.');
+		return;
+	}
+	
+	var yearList = urlParams.get('y');
+	if (yearList != null && yearList.length != 0)
+		yearList = yearList.split(',');
+	
+	if (yearList == null || yearList.length == 0) {
+		console.log('No years informed.');
+		return;
+	}
+	
+	var files = [];
+	var file = new File([''],'data/streamFlows/10251300.csv');
+	if(file != null){
+		files.push(d3.csv('data/streamFlows/10251300.csv'));
+		Promise.all(files).then(
+			function(data) {
+				loadMatricesLayout(data[0],stationList,yearList);
+			});
+	}else{
+		write('No data found.');
+	}
+}
+
+/////////////// MATRICES LAYOUT ///////////////
+function filterData(groundTruth,selectedYear) {
+	var temp = groundTruth.filter(function(d){return d.Date.split('-')[0] == selectedYear;});
+	var realData = temp.map(function(d){return{date: d.Date,flow: d.Streamflow};});
+	return realData;
+}
+
+function loadMatricesLayout(groundTruth,stationList,yearList) {
+
+	var predictionHeatMatricesDiv = d3.select('#predictionHeatMatricesDiv');
+	
+	//If there is already a div, we use it. Otherwise, we create a new one.	
+	if (predictionHeatMatricesDiv.empty()) {
+		predictionHeatMatricesDiv = d3.select('body').append('div')
+		.attr('id','predictionHeatMatricesDiv').attr('class','layout')
+		.style('style','height:'+(heightMatrices+sizeCells+10)+'px;max-width:'+(widthMatrices+sizeCells+10)+'px;')
+	}
+	predictionHeatMatricesDiv.selectAll("*").remove();
+
+	var data = filterData(groundTruth,yearList);
+	
+	var min = 0;
+	var max = d3.max(data,function(d){return +d.flow;});
+	
+	//Creating SVG and Group for the matrix
+	var predictionHeatMatricesSVG = predictionHeatMatricesDiv.append('svg').attr('id','matrix'+stationList+'SVG')
+										 .attr('height',((heightMatrices+sizeCells+12)))
+										 .attr('width',(widthMatrices+sizeCells));
+	var matrixTooltip = d3.select('body').append('div').attr('id','tooltip'+stationList).attr('class','tooltip').style('opacity', 0);
+	var predictionHeatMatricesG = predictionHeatMatricesSVG.append('g').attr('id','matrix'+stationList+'G')
+												   .attr('transform','translate(' + 0 + ',' + 0 + ')');
+	buildMatrix(data,stationList,yearList,min,max);
+}
+
+function buildMatrix(filteredData,stationList,yearList,min,max) {
+	var container = d3.select('#matrix'+stationList+'G');
+	var containerSVG = d3.select('#matrix'+stationList+'SVG');
+	var colorScale = d3.scaleLinear().domain([min,max]).range(['white','blue']);
+								 
+	var format = d3.format(",.2f");
+	
+	var months = createRange(+waterYearStart.split('-')[0],12,+waterYearStart.split('-')[0]-1);
+	var days = createRange(+waterYearStart.split('-')[1],31,+waterYearStart.split('-')[1]-1);
+	var realByMonth = d3.nest().key(function(d) {return d.date.split('-')[1];}).entries(filteredData);
+	months.forEach(function(month,i) {
+		var realDays = realByMonth.filter(function(d){return +d.key == month});
+		container.append('text').text(month).attr('x',0).attr('y',(i+1)*sizeCells).attr('class','smallLabel');
+		days.forEach(function(day,j){
+			var rect = container.append('rect').attr('x',(j+1)*sizeCells+2).attr('y',i*sizeCells)
+							.attr('width',sizeCells).attr('height',sizeCells).style('stroke','none');
+			var realDayData = realDays[0].values.filter(function(d){return +d.date.split('-')[2] == day;});
+			if (realDayData.length != 0) {
+				//console.log(realDayData[0].flow + " - " + colorScale(realDayData[0].flow));
+				rect.attr('id','rect-'+realDayData[0].date)
+					.attr('date',realDayData[0].date)
+					.attr('value',realDayData[0].flow)
+					.attr('station',stationList)
+					.attr('fill',colorScale(realDayData[0].flow))
+					.on('mouseout', function(d) {
+						var date = d3.select(this).attr('date').split('-');
+						var rects = d3.selectAll("rect[id$='"+date[1]+"-"+date[2]+"']");
+						rects.style('stroke','none');
+						rects.each(function(d){
+							var tooltipMatrix = d3.select('#tooltip'+d3.select(this).attr('station'));
+							tooltipMatrix.style('opacity', .0);
+						});
+					})
+					.on('mouseover', function(d) {
+						var date = d3.select(this).attr('date').split('-');
+						var rects = d3.selectAll("rect[id$='"+date[1]+"-"+date[2]+"']");
+						rects.style('stroke','black');
+						rects.each(function(d){
+								var x = d3.select(this).node().getBoundingClientRect().x + 5;
+								var y = d3.select(this).node().getBoundingClientRect().y - 15;
+								var tooltipMatrix = d3.select('#tooltip'+d3.select(this).attr('station'));
+								tooltipMatrix.style('opacity', .9).style('left',x+'px').style('top',y+'px');
+								tooltipMatrix.html(d3.select(this).attr('date')+'<br>'+format(d3.select(this).attr('value')));
+							});
+						});
+			}else {
+				rect.attr('id','None_'+j)
+					.attr('date','null')
+					.attr('value','null')
+					.attr('station','none')
+					.attr('fill','white')
+					.on('mouseout', function(d) {
+						toolTip.style('opacity', .0);
+					})
+					.on('mouseover', function(d) {
+						toolTip.style('opacity', .9);
+						toolTip.html('No info')	
+						.style('left', (d3.event.pageX+5) + 'px')
+						.style('top', (d3.event.pageY-15) + 'px');	
+						})
+			}
+		});
+	});
+	for (j=0;j<31;j++) {
+		container.append('text').text(j+1).attr('x',(j+1)*sizeCells+2).attr('y',12*sizeCells+7).attr('class','smallLabel');
+	}
+	container.append('text').text('Station '+stationList+" - "+yearList).attr('x',0).attr('y',13*sizeCells+10).attr('class','label');
+}
+</script>
+</body>
+</html>

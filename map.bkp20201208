@@ -1,0 +1,264 @@
+<!doctype html>
+<html>
+<head>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+<script src="https://d3js.org/d3.v5.min.js"></script>
+<script type="text/javascript" src="Map.SelectArea.js"></script>
+<script>
+	
+</script>
+</head>	
+<body>
+<table id="pageTable">
+<tr>
+<td>
+<div id="mapid" style="width: 95vw; height: 95vh;"></div>
+</td>
+<td>
+</td>
+</tr>
+</table>
+<script>
+	var map = L.map('mapid').setView([38.556,-118.7005], 5.5);
+	L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token={accessToken}', {
+		attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, <a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
+		id: 'mapbox/light-v10',
+		maxZoom: 18,		
+		tileSize: 512,
+		zoomOffset: -1,
+		accessToken: 'pk.eyJ1Ijoiam9leWd1c3Rhdm9wYWl2YSIsImEiOiJja2ZvcGs1cTMwMm8zMzRzenc3Ynk0aWxqIn0.mfVRfkPtN9InpxFVFQV1LQ'
+	}).addTo(map);
+	map.selectArea.enable();
+	map.on('areaselected',function(e) {
+		map.eachLayer(function(layer) {
+			if (layer instanceof L.Circle) {				
+				if (e.bounds.contains(layer.getLatLng())) {
+					layer.setStyle({color:'red'})
+				}else {
+					layer.setStyle({color:'blue'})
+				}
+			}
+		});
+	});
+	//map.on('click',function(e) {L.popup().setLatLng(e.latlng).setContent(e.latlng.toString()).openOn(map);});
+	
+	var files = [];
+	files.push(d3.csv('./data/SWPStations.csv'));
+	files.push(d3.json('./data/Watershed01.json'));
+	files.push(d3.json('./data/Watershed02.json'));
+	files.push(d3.json('./data/Watershed03.json'));
+	files.push(d3.json('./data/Watershed04.json'));
+	files.push(d3.json('./data/LakesReservoirs.json'));
+	files.push(d3.csv('./data/Contractors.csv'));
+	files.push(d3.json('./data/ServiceAreas.json'));
+	files.push(d3.json('./data/Watersheds.json'));
+	//files.push(d3.csv('./data/WaterRightholdersSubset.csv'));
+	//files.push(d3.json('./data/RiversCreeks.json'));
+	Promise.all(files)
+	.then(
+	function(data) {
+		//LAYERS SET
+		var watershedsGroup,watersheds2Group;
+		var stationsGroup;
+		var lakesReservoirsGoup;
+		var riversGroup;
+		var wrGroup;
+		var servicesGroup;
+		
+		//Watersheds layer
+		var ws01 = {
+			"color": "#335439",
+			"weight": 2,
+			"opacity": 0.95
+		};
+		var ws02 = {
+			"color": "#186ddb",
+			"weight": 2,
+			"opacity": 0.95
+		};
+		var ws03 = {
+			"color": "#8aad36",
+			"weight": 2,
+			"opacity": 0.95
+		};
+		var ws04 = {
+			"color": "#993655",
+			"weight": 2,
+			"opacity": 0.95
+		};
+		function onEachFeature(feature, layer) {
+			layer.on('click', function (e) {
+			  L.popup().setLatLng(e.latlng).setContent("<b>"+feature.properties.HUC8+"</b><br />"+feature.properties.Name).openOn(map);
+			});
+		}
+		var watersheds = [];
+		watersheds.push(L.geoJSON(data[1],{style: ws01,onEachFeature: onEachFeature}));
+		watersheds.push(L.geoJSON(data[2],{style: ws02,onEachFeature: onEachFeature}));
+		watersheds.push(L.geoJSON(data[3],{style: ws03,onEachFeature: onEachFeature}));
+		watersheds.push(L.geoJSON(data[4],{style: ws04,onEachFeature: onEachFeature}));
+		watershedsGroup = L.layerGroup(watersheds);//.addTo(map);
+		
+		var wsu = {
+			"color": "#993655",
+			"weight": 2,
+			"opacity": 0.95
+		};
+		function onEachWatershedFeature(feature, layer) {
+			layer.on('click', function (e) {
+			  L.popup().setLatLng(e.latlng).setContent("<b>"+feature.properties.HUC8+"</b><br />"+feature.properties.Name).openOn(map);
+			});
+		}
+		watersheds2Group = L.layerGroup([L.geoJSON(data[8],{style: wsu,onEachFeature: onEachWatershedFeature})]);//.addTo(map);		
+		
+		//Stations layer
+		var stations = [];
+		data[0].forEach(function(station,i) {
+			var circle = L.circle([station.LAT_GAGE,station.LNG_GAGE], {
+						id: station.STAID,
+						color: 'black',
+						fillColor: 'black',
+						fillOpacity: 1.0,
+						radius: 50
+					});
+			if (station.CLASS == 'Ref') circle.setStyle({color:'red',fillColor:'red'});
+			else if (station.CLASS == 'Non-ref') circle.setStyle({color:'yellow',fillColor:'yellow'});
+			circle.on('click',function(e) {
+								//var page = "<b>"+station.CLASS+"</b><br />"+station.STAID+": "+station.STANAME;
+								var page = '<html><head></head><body><div><object type="text/html" data="http://localhost:8080/map/interactiveMap/stationFlow.html?s='+station.STAID+'&y=2018" width="400px" height="140px"></object></div></body></html>'
+								L.popup().setLatLng(e.latlng).setContent(page).openOn(map);
+							});
+			stations.push(circle);				
+		})
+		stationsGroup = L.layerGroup(stations);//.addTo(map);
+		
+		//Lakes and reservoirs layer
+		var lakesStyle = {
+			"color": "#0026ff",
+			"weight": 1,
+			"opacity": 1
+		};
+		function onEachLakeFeature(feature, layer) {
+			layer.on('click', function (e) {
+			  L.popup().setLatLng(e.latlng).setContent("<b>"+feature.properties.GNIS_ID+"</b><br />"+feature.properties.GNIS_Name).openOn(map);
+			});
+		}
+		lakesReservoirsGoup = L.layerGroup([L.geoJSON(data[5],{style: lakesStyle, onEachFeature: onEachLakeFeature})]);//.addTo(map);
+		
+		//Services Areas
+		var saStyle = {
+			"color": "#0026ff",
+			"weight": 1,
+			"opacity": 1
+		};
+		function onEachServiceFeature(feature, layer) {
+			layer.on('click', function (e) {
+			  L.popup().setLatLng(e.latlng).setContent("<b>"+feature.properties.gid+"</b><br />"+feature.properties.name).openOn(map);
+			});
+		}
+		servicesGroup = L.layerGroup([L.geoJSON(data[7],{style: saStyle, onEachFeature: onEachServiceFeature})]);//.addTo(map);
+		
+		//Contractors
+		var cts = [];
+		var latOrig, longOrig;
+		var extents = d3.extent(data[6],function(d){return +d.ACREFT_2010});
+		console.log(extents);
+		data[6].forEach(function(ct,i) {
+			var marker = L.marker([ct.LAT,ct.LONG], {
+				icon: L.icon({
+						iconUrl: './data/icons/wr.png',
+						iconSize:     [16,16], // size of the icon
+						iconAnchor:   [8,8], // point of the icon which will correspond to marker's location
+						popupAnchor:  [-3,-76] // point from which the popup should open relative to the iconAnchor
+					})
+			});
+			var marker2;
+			if (ct.ID == 0) {
+				marker2	= L.marker([ct.LAT,ct.LONG]);
+				latOrig = ct.LAT;
+				longOrig = ct.LONG;
+			}else
+				marker2	= L.circle([ct.LAT,ct.LONG], ((parseInt(ct.ACREFT_2010) - 10)/70), {
+							id: ct.NAME,
+							color: 'black',
+							fillColor: 'black',
+							fillOpacity: 1.0,
+							radius: 50
+						});
+
+			marker2.on('click',function(e) {
+								var text = ct.NAME + " (Water delivered: "+ct.ACREFT_2010+")";
+								L.popup().setLatLng(e.latlng).setContent(text).openOn(map);
+							});
+			cts.push(marker2);
+			/*
+			var line = L.polygon([[latOrig,longOrig],[ct.LAT,ct.LONG]]);
+			line.on('click',function(e) {
+								var text = "Water delivered: "+ct.ACREFT_2010+" ";
+								L.popup().setLatLng(e.latlng).setContent(text).openOn(map);
+							});
+			cts.push(line);
+			*/
+		})
+		ctGroup = L.layerGroup(cts);//.addTo(map);
+		
+		//Water rights layer
+/*		
+		var wrs = [];
+		data[6].forEach(function(wrh,i) {
+			var marker = L.marker([wrh.LATITUDE,wrh.LONGITUDE], {
+				icon: L.icon({
+						iconUrl: './data/icons/wr.png',
+						iconSize:     [16,16], // size of the icon
+						iconAnchor:   [8,8], // point of the icon which will correspond to marker's location
+						popupAnchor:  [-3,-76] // point from which the popup should open relative to the iconAnchor
+					})
+			});
+			var marker2 = L.circle([wrh.LATITUDE,wrh.LONGITUDE], {
+						id: wrh.POD_ID,
+						color: 'black',
+						fillColor: 'black',
+						fillOpacity: 1.0,
+						radius: 50
+					});
+			marker.on('click',function(e) {
+								var text = '-'+wrh.POD_ID+'-';
+								L.popup().setLatLng(e.latlng).setContent(text).openOn(map);
+							});
+			wrs.push(marker);
+		})
+		wrGroup = L.layerGroup(wrs).addTo(map);
+*/		
+		
+		//Rivers layer ==> hidden because the layer is to large.
+/*		
+		var riversStyle = {
+			"color": "#d400ff",
+			"weight": 1,
+			"opacity": 1
+		};
+		function onEachRiverFeature(feature, layer) {
+			layer.on('click', function (e) {
+			  L.popup().setLatLng(e.latlng).setContent("<b>"+feature.properties.GNIS_ID+"</b><br />"+feature.properties.GNIS_Name+" / "+feature.properties.FlowDir).openOn(map);
+			});
+		}
+		riversGroup = L.layerGroup([L.geoJSON(data[6],{style: riversStyle, onEachFeature: onEachRiverFeature})]).addTo(map);
+*/		
+		var baseMaps = {};
+		var overlayMaps = {
+			//"Rivers": riversGroup,
+			"Contractors": ctGroup,
+			//"Water Right Holders": wrGroup,
+			"Lakes/Reservoirs": lakesReservoirsGoup,
+			"Watersheds": watersheds2Group,
+			"Stations": stationsGroup,
+			"Service Areas": servicesGroup
+		};
+		L.control.layers(baseMaps,overlayMaps).addTo(map);
+	
+	})
+	//.catch(function(e) {console.log('MatricesLayout Error: '+e);});
+	
+</script>
+</body>
+</html>

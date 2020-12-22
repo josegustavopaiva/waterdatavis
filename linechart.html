@@ -1,0 +1,99 @@
+<!doctype html>
+<html>
+<head>
+<script src="https://d3js.org/d3.v5.min.js"></script>
+<link rel="stylesheet" type="text/css" href="styles.css" />
+</head>	
+<body>
+<script>
+var sHeight = 200, sWidth = 390;
+var toolTip = d3.select('body').append('div').attr('class','tooltip').style('opacity', 0);
+loadPage();
+
+function loadPage() {
+	const queryString = window.location.search;
+	const urlParams = new URLSearchParams(queryString);
+	var contractor = urlParams.get('c');
+	if (contractor == null || contractor.length == 0) {
+		console.log('No contractors informed.');
+		return;
+	}
+	var files = [];
+	files.push(d3.csv('data/Contractors.csv'));
+		Promise.all(files).then(
+			function(data) {
+				loadLineChart(data[0],contractor);
+			});
+}
+
+/////////////// LINE CHART LAYOUT ///////////////
+function loadLineChart(data,contractor) {
+	var lineContractor = data.filter(function(d){return d.ID == contractor;});
+	var values = [];
+	for(var key in lineContractor[0]) {
+		if (key.startsWith('Total_')) {
+			var dataValue = {"year":+key.substring(key.indexOf('Total_')+6),"value":lineContractor[0][key]};
+			values.push(dataValue);
+		}
+	}
+	console.log(values);
+	
+	var linechartDiv = d3.select('#linechartDiv');
+	
+	//If there is already a div, we use it. Otherwise, we create a new one.	
+	if (linechartDiv.empty()) {
+		linechartDiv = d3.select('body').append('div')
+		.attr('id','linechartDiv').attr('class','layout')
+		.style('style','height:'+sHeight+'px;max-width:'+sWidth+'px;')
+	}
+	linechartDiv.selectAll("*").remove();
+	var seriesSVG = linechartDiv.append('svg').attr('id','seriesSVG')
+										   .attr('height',150)
+										   .attr('width',315);
+	var seriesG = seriesSVG.append('g').attr('id','seriesG')
+												   .attr('transform','translate(' + 0 + ',' + 10 + ')');
+	
+	//Vertical axis: water delivery information
+	var vScale = d3.scaleLinear().domain(d3.extent(values,function(d){return +d.value;})).range([sHeight-100,0]);	
+	var vAxis = d3.axisLeft().scale(vScale);
+	//seriesG.append('g').attr('transform','translate(70,10)').call(vAxis);
+	
+	//Horizontal axis: date information
+	var hScale = d3.scaleLinear().domain(d3.extent(values,function(d){return +d.year})).range([0,sWidth-100]);
+	var hAxis = d3.axisBottom().scale(hScale).tickValues(values.map(function(d){return +d.year})).tickFormat(d3.format(''));;
+	seriesG.append('g').attr('transform','translate(10,'+(sHeight-80)+')').call(hAxis);
+	
+	//Drawing line
+	var line = d3.line().x(function(d){return hScale(d.year);})
+						.y(function(d){return vScale(d.value);});
+
+	var lineG = seriesG.append('svg').append('g').append('path');
+	lineG.style('stroke','red').style('fill','none').attr('transform','translate(10,10)');
+	lineG.attr('d',line(values));
+
+	seriesG.append('svg').append('g').attr('transform','translate(10,10)').selectAll('dot')
+						 .data(values)
+						 .enter().append('circle')
+								.attr('r',4)
+								.attr('date',function(d){return d.year;})
+								.attr('value',function(d){return d.value;})
+								.style('fill','red')
+								.attr('cx',function(d){return hScale(d.year);})
+								.attr('cy',function(d){return vScale(d.value);})
+								.on('mouseout',function(d) {
+									toolTip.style('opacity', .0);
+								})
+								.on('mouseover',function(d) {
+									toolTip.style('opacity', .9)
+									//.style('left',(d3.event.pageX+5)+'px')
+									//.style('top',(d3.event.pageY-15)+'px')
+									.style('left','200px')
+									.style('top','10px')
+									var tooltipMessage = d3.select(this).attr('date')+'<br>'+d3.select(this).attr('value');
+									toolTip.html(tooltipMessage);
+								});
+
+}
+</script>
+</body>
+</html>
