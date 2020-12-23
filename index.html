@@ -424,7 +424,7 @@
 							fillOpacity: 0.8
 						});
 				marker.on('click',function(e) {
-								var page = '<html><head></head><body><div><object type="text/html" data="http://localhost:8080/map/interactiveMap/linechart.html?c='+ct.id+'" width="350px" height="170px"></object></div></body></html>'
+								var page = '<html><head></head><body><div><object type="text/html" data="./linechart.html?c='+ct.id+'" width="350px" height="170px"></object></div></body></html>'
 								L.popup().setLatLng(e.latlng).setContent(page).openOn(map);
 							});
 							
@@ -516,7 +516,7 @@
 			}
 			circle.on('click',function(e) {
 								//var page = "<b>"+station.CLASS+"</b><br />"+station.STAID+": "+station.STANAME;
-								var page = '<html><head></head><body><div><object type="text/html" data="http://localhost:8080/map/interactiveMap/stationFlow.html?s='+station.STAID+'&y=2018" width="400px" height="140px"></object></div></body></html>'
+								var page = '<html><head></head><body><div><object type="text/html" data="./stationFlow.html?s='+station.STAID+'&y=2018" width="400px" height="140px"></object></div></body></html>'
 								L.popup().setLatLng(e.latlng).setContent(page).openOn(map);
 							});
 			stations.push(circle);				
